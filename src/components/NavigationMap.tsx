@@ -1,6 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,15 +14,23 @@ const LONELY_TREE = {
   address: "서울특별시 송파구 올림픽로 424"
 };
 
+declare global {
+  interface Window {
+    naver: any;
+  }
+}
+
 const NavigationMap = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState('');
+  const map = useRef<any>(null);
+  const [naverApiKey, setNaverApiKey] = useState('');
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
   const [isNavigating, setIsNavigating] = useState(false);
-  const [isTokenSet, setIsTokenSet] = useState(false);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [routePolyline, setRoutePolyline] = useState<any>(null);
+  const [markers, setMarkers] = useState<any[]>([]);
 
   // 두 지점 간 거리 계산 (km)
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -36,6 +42,22 @@ const NavigationMap = () => {
               Math.sin(dLng/2) * Math.sin(dLng/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+  };
+
+  // 네이버 맵 스크립트 로드
+  const loadNaverMapScript = (clientId: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (window.naver && window.naver.maps) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}&submodules=geocoder`;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('네이버 맵 스크립트 로드 실패'));
+      document.head.appendChild(script);
+    });
   };
 
   // 사용자 위치 가져오기
@@ -60,7 +82,7 @@ const NavigationMap = () => {
         }
 
         setError('');
-        if (map.current && isTokenSet) {
+        if (map.current && isMapLoaded) {
           addMarkersAndRoute(userLat, userLng);
         }
       },
@@ -75,104 +97,197 @@ const NavigationMap = () => {
     );
   };
 
+  // 기존 마커와 경로 제거
+  const clearMapElements = () => {
+    markers.forEach(marker => marker.setMap(null));
+    setMarkers([]);
+    
+    if (routePolyline) {
+      routePolyline.setMap(null);
+      setRoutePolyline(null);
+    }
+  };
+
   // 지도에 마커와 경로 추가
   const addMarkersAndRoute = async (userLat: number, userLng: number) => {
-    if (!map.current) return;
+    if (!map.current || !window.naver) return;
 
-    // 기존 마커와 경로 제거
-    const existingMarkers = document.querySelectorAll('.mapboxgl-marker');
-    existingMarkers.forEach(marker => marker.remove());
+    clearMapElements();
+
+    const newMarkers = [];
 
     // 사용자 위치 마커
-    new mapboxgl.Marker({ color: '#3b82f6' })
-      .setLngLat([userLng, userLat])
-      .setPopup(new mapboxgl.Popup().setHTML('<div>현재 위치</div>'))
-      .addTo(map.current);
+    const userMarker = new window.naver.maps.Marker({
+      position: new window.naver.maps.LatLng(userLat, userLng),
+      map: map.current,
+      title: '현재 위치',
+      icon: {
+        content: '<div style="background: #3b82f6; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+        anchor: new window.naver.maps.Point(6, 6)
+      }
+    });
+    newMarkers.push(userMarker);
 
     // 나홀로나무 마커
-    new mapboxgl.Marker({ color: '#10b981' })
-      .setLngLat([LONELY_TREE.lng, LONELY_TREE.lat])
-      .setPopup(new mapboxgl.Popup().setHTML(`
-        <div>
-          <h3>${LONELY_TREE.name}</h3>
-          <p>${LONELY_TREE.address}</p>
-        </div>
-      `))
-      .addTo(map.current);
+    const treeMarker = new window.naver.maps.Marker({
+      position: new window.naver.maps.LatLng(LONELY_TREE.lat, LONELY_TREE.lng),
+      map: map.current,
+      title: LONELY_TREE.name,
+      icon: {
+        content: '<div style="background: #10b981; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+        anchor: new window.naver.maps.Point(6, 6)
+      }
+    });
+    newMarkers.push(treeMarker);
 
-    // 경로 찾기
+    // 정보창
+    const infoWindow = new window.naver.maps.InfoWindow({
+      content: `
+        <div style="padding: 10px; font-size: 12px;">
+          <h4 style="margin: 0 0 5px 0; font-weight: bold;">${LONELY_TREE.name}</h4>
+          <p style="margin: 0; color: #666;">${LONELY_TREE.address}</p>
+        </div>
+      `
+    });
+
+    window.naver.maps.Event.addListener(treeMarker, 'click', function() {
+      if (infoWindow.getMap()) {
+        infoWindow.close();
+      } else {
+        infoWindow.open(map.current, treeMarker);
+      }
+    });
+
+    setMarkers(newMarkers);
+
+    // 네이버 길찾기 API 호출
     try {
       const response = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/walking/${userLng},${userLat};${LONELY_TREE.lng},${LONELY_TREE.lat}?steps=true&geometries=geojson&access_token=${mapboxToken}`
+        `https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving?start=${userLng},${userLat}&goal=${LONELY_TREE.lng},${LONELY_TREE.lat}&option=trafast`,
+        {
+          headers: {
+            'X-NCP-APIGW-API-KEY-ID': naverApiKey,
+            'X-NCP-APIGW-API-KEY': naverApiKey
+          }
+        }
       );
-      
+
+      if (!response.ok) {
+        throw new Error('길찾기 API 오류');
+      }
+
       const data = await response.json();
       
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        
-        // 경로 라인 추가
-        if (map.current.getSource('route')) {
-          map.current.removeLayer('route');
-          map.current.removeSource('route');
+      if (data.route && data.route.trafast && data.route.trafast.length > 0) {
+        const route = data.route.trafast[0];
+        const path = [];
+
+        // 경로 좌표 변환
+        for (let i = 0; i < route.path.length; i += 2) {
+          path.push(new window.naver.maps.LatLng(route.path[i + 1], route.path[i]));
         }
 
-        map.current.addSource('route', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: route.geometry
-          }
+        // 경로 폴리라인 그리기
+        const polyline = new window.naver.maps.Polyline({
+          map: map.current,
+          path: path,
+          strokeColor: '#10b981',
+          strokeOpacity: 0.8,
+          strokeWeight: 5
         });
 
-        map.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#10b981',
-            'line-width': 4
-          }
-        });
+        setRoutePolyline(polyline);
 
         // 지도 영역 조정
-        const coordinates = route.geometry.coordinates;
-        const bounds = new mapboxgl.LngLatBounds();
-        coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
-        map.current.fitBounds(bounds, { padding: 50 });
+        const bounds = new window.naver.maps.LatLngBounds();
+        path.forEach(coord => bounds.extend(coord));
+        map.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
 
         setIsNavigating(true);
+      } else {
+        // API 실패 시 직선 경로 그리기
+        const straightPath = [
+          new window.naver.maps.LatLng(userLat, userLng),
+          new window.naver.maps.LatLng(LONELY_TREE.lat, LONELY_TREE.lng)
+        ];
+
+        const polyline = new window.naver.maps.Polyline({
+          map: map.current,
+          path: straightPath,
+          strokeColor: '#10b981',
+          strokeOpacity: 0.8,
+          strokeWeight: 5,
+          strokeStyle: [10, 5] // 점선
+        });
+
+        setRoutePolyline(polyline);
+
+        const bounds = new window.naver.maps.LatLngBounds();
+        straightPath.forEach(coord => bounds.extend(coord));
+        map.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+
+        setIsNavigating(true);
+        setError('상세 경로를 찾을 수 없어 직선 경로를 표시합니다.');
       }
     } catch (error) {
-      setError('경로를 찾을 수 없습니다.');
+      // 네트워크 오류 시 직선 경로 그리기
+      const straightPath = [
+        new window.naver.maps.LatLng(userLat, userLng),
+        new window.naver.maps.LatLng(LONELY_TREE.lat, LONELY_TREE.lng)
+      ];
+
+      const polyline = new window.naver.maps.Polyline({
+        map: map.current,
+        path: straightPath,
+        strokeColor: '#10b981',
+        strokeOpacity: 0.8,
+        strokeWeight: 5,
+        strokeStyle: [10, 5] // 점선
+      });
+
+      setRoutePolyline(polyline);
+
+      const bounds = new window.naver.maps.LatLngBounds();
+      straightPath.forEach(coord => bounds.extend(coord));
+      map.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+
+      setIsNavigating(true);
+      setError('상세 경로를 찾을 수 없어 직선 경로를 표시합니다.');
     }
   };
 
   // 지도 초기화
-  const initializeMap = () => {
-    if (!mapContainer.current || !mapboxToken) return;
+  const initializeMap = async () => {
+    if (!mapContainer.current || !naverApiKey) return;
 
-    mapboxgl.accessToken = mapboxToken;
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [LONELY_TREE.lng, LONELY_TREE.lat],
-      zoom: 15
-    });
+    try {
+      await loadNaverMapScript(naverApiKey);
+      
+      map.current = new window.naver.maps.Map(mapContainer.current, {
+        center: new window.naver.maps.LatLng(LONELY_TREE.lat, LONELY_TREE.lng),
+        zoom: 15,
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+          style: window.naver.maps.MapTypeControlStyle.BUTTON,
+          position: window.naver.maps.Position.TOP_RIGHT
+        },
+        zoomControl: true,
+        zoomControlOptions: {
+          style: window.naver.maps.ZoomControlStyle.SMALL,
+          position: window.naver.maps.Position.TOP_RIGHT
+        }
+      });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    setIsTokenSet(true);
+      setIsMapLoaded(true);
+      setError('');
+    } catch (error) {
+      setError('네이버 맵을 로드할 수 없습니다. API 키를 확인해주세요.');
+    }
   };
 
-  const handleTokenSubmit = () => {
-    if (!mapboxToken.trim()) {
-      setError('Mapbox 토큰을 입력해주세요.');
+  const handleApiKeySubmit = () => {
+    if (!naverApiKey.trim()) {
+      setError('네이버 클라우드 플랫폼 Client ID를 입력해주세요.');
       return;
     }
     initializeMap();
@@ -180,11 +295,14 @@ const NavigationMap = () => {
 
   useEffect(() => {
     return () => {
-      map.current?.remove();
+      clearMapElements();
+      if (map.current) {
+        map.current.destroy();
+      }
     };
   }, []);
 
-  if (!isTokenSet) {
+  if (!isMapLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -196,27 +314,33 @@ const NavigationMap = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="token">Mapbox Access Token</Label>
+              <Label htmlFor="apikey">네이버 클라우드 플랫폼 Client ID</Label>
               <Input
-                id="token"
-                type="password"
-                placeholder="pk.ey..."
-                value={mapboxToken}
-                onChange={(e) => setMapboxToken(e.target.value)}
+                id="apikey"
+                type="text"
+                placeholder="Client ID를 입력하세요"
+                value={naverApiKey}
+                onChange={(e) => setNaverApiKey(e.target.value)}
               />
               <p className="text-sm text-muted-foreground mt-1">
                 <a 
-                  href="https://mapbox.com/" 
+                  href="https://console.ncloud.com/naver-service/application" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  mapbox.com
+                  네이버 클라우드 플랫폼
                 </a>
-                에서 무료 토큰을 받으세요
+                에서 Maps API를 활성화하고 Client ID를 발급받으세요
               </p>
             </div>
-            <Button onClick={handleTokenSubmit} className="w-full">
+            {error && (
+              <Alert className="border-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button onClick={handleApiKeySubmit} className="w-full">
               지도 시작하기
             </Button>
           </CardContent>
