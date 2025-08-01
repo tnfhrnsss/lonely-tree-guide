@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MapPin, Navigation, AlertTriangle, Compass, Navigation2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MapPin, Navigation, AlertTriangle, Compass, Navigation2, Globe } from 'lucide-react';
+import { translations, languageNames, type Language } from '@/lib/translations';
 
 // 나홀로나무 위치
 const LONELY_TREE = {
@@ -24,6 +26,9 @@ const SimpleNavigation = () => {
   const [error, setError] = useState<string>('');
   const [isNavigating, setIsNavigating] = useState(false);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
+  const [language, setLanguage] = useState<Language>('ko');
+
+  const t = translations[language];
 
   // 두 지점 간 거리 계산 (km)
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -52,33 +57,50 @@ const SimpleNavigation = () => {
 
   // 방향각을 방위로 변환
   const getDirectionText = (bearing: number): string => {
-    const directions = ['북쪽', '북동쪽', '동쪽', '남동쪽', '남쪽', '남서쪽', '서쪽', '북서쪽'];
+    const directions = [
+      t.directions.north,
+      t.directions.northeast,
+      t.directions.east,
+      t.directions.southeast,
+      t.directions.south,
+      t.directions.southwest,
+      t.directions.west,
+      t.directions.northwest
+    ];
     const index = Math.round(bearing / 45) % 8;
     return directions[index];
   };
 
   // 상세 방향 안내
   const getDetailedDirection = (bearing: number): string => {
-    if (bearing >= 337.5 || bearing < 22.5) return "정북쪽으로 직진";
-    if (bearing >= 22.5 && bearing < 67.5) return "북동쪽으로 이동";
-    if (bearing >= 67.5 && bearing < 112.5) return "정동쪽으로 이동";
-    if (bearing >= 112.5 && bearing < 157.5) return "남동쪽으로 이동";
-    if (bearing >= 157.5 && bearing < 202.5) return "정남쪽으로 이동";
-    if (bearing >= 202.5 && bearing < 247.5) return "남서쪽으로 이동";
-    if (bearing >= 247.5 && bearing < 292.5) return "정서쪽으로 이동";
-    if (bearing >= 292.5 && bearing < 337.5) return "북서쪽으로 이동";
-    return "직진";
+    if (bearing >= 337.5 || bearing < 22.5) return t.detailedDirections.north;
+    if (bearing >= 22.5 && bearing < 67.5) return t.detailedDirections.northeast;
+    if (bearing >= 67.5 && bearing < 112.5) return t.detailedDirections.east;
+    if (bearing >= 112.5 && bearing < 157.5) return t.detailedDirections.southeast;
+    if (bearing >= 157.5 && bearing < 202.5) return t.detailedDirections.south;
+    if (bearing >= 202.5 && bearing < 247.5) return t.detailedDirections.southwest;
+    if (bearing >= 247.5 && bearing < 292.5) return t.detailedDirections.west;
+    if (bearing >= 292.5 && bearing < 337.5) return t.detailedDirections.northwest;
+    return t.detailedDirections.straight;
   };
 
-  // 사용자 위치 가져오기
+  // 사용자 위치 가져오기 (iOS Safari 호환성 개선)
   const getUserLocation = () => {
     if (!navigator.geolocation) {
-      setError('이 브라우저는 위치 서비스를 지원하지 않습니다.');
+      setError(t.errors.geolocationNotSupported);
       return;
     }
 
     setIsLocationLoading(true);
     setError('');
+
+    // iOS Safari에서는 사용자 제스처로 트리거되어야 하며, 
+    // HTTPS 환경에서만 제대로 작동합니다
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000, // iOS에서 더 긴 시간 허용
+      maximumAge: 30000 // 캐시 시간 단축
+    };
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -92,8 +114,14 @@ const SimpleNavigation = () => {
         setBearing(bear);
         setIsLocationLoading(false);
 
+        console.log('위치 업데이트:', { 
+          lat: userLat.toFixed(6), 
+          lng: userLng.toFixed(6), 
+          distance: dist.toFixed(3) + 'km' 
+        });
+
         if (dist > 3) {
-          setError(`나홀로나무로부터 ${dist.toFixed(1)}km 떨어져 있습니다. 3km 이내에서만 정확한 안내를 제공합니다.`);
+          setError(t.errors.tooFarAway.replace('{distance}', dist.toFixed(1)));
           setIsNavigating(false);
           return;
         }
@@ -102,13 +130,16 @@ const SimpleNavigation = () => {
       },
       (error) => {
         setIsLocationLoading(false);
-        setError('위치 정보를 가져올 수 없습니다. 위치 서비스를 허용해 주세요.');
+        console.error('위치 정보 오류:', error);
+        
+        // iOS Safari 특별 처리
+        if (error.code === error.PERMISSION_DENIED) {
+          setError(t.errors.locationPermissionDenied + ' (iOS에서는 설정 > 개인정보 보호 > 위치 서비스에서 Safari 허용 필요)');
+        } else {
+          setError(t.errors.locationPermissionDenied);
+        }
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
-      }
+      options
     );
   };
 
@@ -128,11 +159,32 @@ const SimpleNavigation = () => {
       {/* 헤더 */}
       <div className="bg-card border-b p-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <MapPin className="h-6 w-6 text-primary" />
-            나홀로나무 내비게이션
-          </h1>
-          <p className="text-muted-foreground mt-1">올림픽공원의 나홀로나무까지 안내해드립니다</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <MapPin className="h-6 w-6 text-primary" />
+                {t.appTitle}
+              </h1>
+              <p className="text-muted-foreground mt-1">{t.appDescription}</p>
+            </div>
+            
+            {/* 언어 선택기 */}
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <Select value={language} onValueChange={(value: Language) => setLanguage(value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(languageNames).map(([code, name]) => (
+                    <SelectItem key={code} value={code}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -144,13 +196,20 @@ const SimpleNavigation = () => {
               <div className="flex-1">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-primary" />
-                  {LONELY_TREE.name}
+                  {t.destination}
                 </h3>
                 <p className="text-sm text-muted-foreground">{LONELY_TREE.address}</p>
                 {distance !== null && (
                   <p className="text-sm text-primary font-medium mt-1">
-                    현재 거리: {distance.toFixed(1)}km
+                    {t.currentDistance}: {distance.toFixed(1)}km
                   </p>
+                )}
+                {userLocation && (
+                  <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                    <p className="font-medium">{t.currentLocation}:</p>
+                    <p>{t.latitude}: {userLocation.lat.toFixed(6)}</p>
+                    <p>{t.longitude}: {userLocation.lng.toFixed(6)}</p>
+                  </div>
                 )}
               </div>
               
@@ -161,7 +220,7 @@ const SimpleNavigation = () => {
                 variant={isNavigating ? "secondary" : "default"}
               >
                 <Navigation className="h-4 w-4" />
-                {isLocationLoading ? "위치 확인 중..." : isNavigating ? "경로 새로고침" : "내비게이션 시작"}
+                {isLocationLoading ? t.locationChecking : isNavigating ? t.refreshLocation : t.startNavigation}
               </Button>
             </div>
           </CardContent>
@@ -181,7 +240,7 @@ const SimpleNavigation = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Compass className="h-5 w-5" />
-                방향 안내
+                {t.directionGuide}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -213,12 +272,12 @@ const SimpleNavigation = () => {
               {/* 방향 텍스트 */}
               <div className="text-center space-y-2">
                 <p className="text-lg font-medium">{getDetailedDirection(bearing)}</p>
-                <p className="text-sm text-muted-foreground">
-                  약 {distance < 1 ? Math.round(distance * 1000) + 'm' : distance.toFixed(1) + 'km'} 남음
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  도보 시간: 약 {Math.ceil(distance * 12)}분
-                </p>
+                 <p className="text-sm text-muted-foreground">
+                   약 {distance < 1 ? Math.round(distance * 1000) + 'm' : distance.toFixed(1) + 'km'} {t.distanceRemaining}
+                 </p>
+                 <p className="text-sm text-muted-foreground">
+                   {t.walkingTime} {Math.ceil(distance * 12)}{t.walkingTimeUnit}
+                 </p>
               </div>
             </CardContent>
           </Card>
@@ -230,11 +289,11 @@ const SimpleNavigation = () => {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-primary">
                 <Navigation2 className="h-5 w-5" />
-                <span className="font-medium">목적지에 도착했습니다! 🌳</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                나홀로나무를 찾아 멋진 사진을 남겨보세요!
-              </p>
+                 <span className="font-medium">{t.arrived}</span>
+               </div>
+               <p className="text-sm text-muted-foreground mt-1">
+                 {t.arrivedMessage}
+               </p>
             </CardContent>
           </Card>
         )}
@@ -244,17 +303,16 @@ const SimpleNavigation = () => {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Navigation className="h-5 w-5" />
-                사용법
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>• "내비게이션 시작" 버튼을 눌러 현재 위치를 확인하세요</li>
-                <li>• 나침반을 보고 화살표 방향으로 이동하세요</li>
-                <li>• 3km 이내에서 정확한 방향 안내를 제공합니다</li>
-                <li>• 위치는 10초마다 자동으로 업데이트됩니다</li>
-              </ul>
+                 <Navigation className="h-5 w-5" />
+                 {t.howToUse}
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <ul className="space-y-2 text-sm text-muted-foreground">
+                 {t.howToUseItems.map((item, index) => (
+                   <li key={index}>• {item}</li>
+                 ))}
+               </ul>
             </CardContent>
           </Card>
         )}
