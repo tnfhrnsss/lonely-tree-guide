@@ -1,7 +1,7 @@
-import NavigationMap from '@/components/NavigationMap';
+import SimpleNavigation from '@/components/SimpleNavigation';
 
 const Index = () => {
-  return <NavigationMap />;
+  return <SimpleNavigation />;
 };
 
 export default Index;
