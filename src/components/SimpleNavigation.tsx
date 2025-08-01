@@ -198,7 +198,7 @@ const SimpleNavigation = () => {
                   <MapPin className="h-4 w-4 text-primary" />
                   {t.destination}
                 </h3>
-                <p className="text-sm text-muted-foreground">{LONELY_TREE.address}</p>
+                <p className="text-sm text-muted-foreground">{t.destinationAddress}</p>
                 {distance !== null && (
                   <p className="text-sm text-primary font-medium mt-1">
                     {t.currentDistance}: {distance.toFixed(1)}km

@@ -4,6 +4,7 @@ export interface Translations {
   appTitle: string;
   appDescription: string;
   destination: string;
+  destinationAddress: string;
   currentDistance: string;
   startNavigation: string;
   refreshLocation: string;
@@ -52,6 +53,7 @@ export const translations: Record<Language, Translations> = {
     appTitle: "나홀로나무 내비게이션",
     appDescription: "올림픽공원의 나홀로나무까지 안내해드립니다",
     destination: "올림픽공원 나홀로나무",
+    destinationAddress: "서울특별시 송파구 올림픽로 424",
     currentDistance: "현재 거리",
     startNavigation: "내비게이션 시작",
     refreshLocation: "경로 새로고침",
@@ -103,6 +105,7 @@ export const translations: Record<Language, Translations> = {
     appTitle: "Lonely Tree Navigation",
     appDescription: "Navigate to the Lonely Tree in Olympic Park",
     destination: "Olympic Park Lonely Tree",
+    destinationAddress: "424 Olympic-ro, Songpa-gu, Seoul, South Korea",
     currentDistance: "Current Distance",
     startNavigation: "Start Navigation",
     refreshLocation: "Refresh Location",
@@ -154,6 +157,7 @@ export const translations: Record<Language, Translations> = {
     appTitle: "孤独树导航",
     appDescription: "导航至奥林匹克公园的孤独树",
     destination: "奥林匹克公园孤独树",
+    destinationAddress: "韩国首尔松坡区奥林匹克路424号",
     currentDistance: "当前距离",
     startNavigation: "开始导航",
     refreshLocation: "刷新位置",
@@ -205,6 +209,7 @@ export const translations: Record<Language, Translations> = {
     appTitle: "一本木ナビゲーション",
     appDescription: "オリンピック公園の一本木まで案内します",
     destination: "オリンピック公園一本木",
+    destinationAddress: "韓国ソウル特別市松坡区オリンピック路424",
     currentDistance: "現在の距離",
     startNavigation: "ナビゲーション開始",
     refreshLocation: "位置更新",
