@@ -6,6 +6,7 @@
   ],
   "compilerOptions": {
     "baseUrl": ".",
+    "outDir": "docs",
     "paths": {
       "@/*": ["./src/*"]
     },
