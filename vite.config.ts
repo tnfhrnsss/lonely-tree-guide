@@ -5,13 +5,10 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: '/lonely-tree-guide/',
+  base: mode === 'production' ? '/lonely-tree-guide/' : '/',
   server: {
     host: "::",
     port: 8080,
-  },
-  build: {
-    outDir: 'docs',
   },
   plugins: [
     react(),
