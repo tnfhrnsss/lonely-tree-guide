@@ -36,7 +36,7 @@ This project is built with:
 - Tailwind CSS
 
 ## Screenshot
-  ![lonelytree](https://tnfhrnsss.github.io/docs/sub-projects/img/lonelytree0.png){: width="50%" height="50%"}
+  ![lonelytree](https://tnfhrnsss.github.io/docs/sub-projects/img/lonelytree0.png)
 
 ### blog reference
 * https://tnfhrnsss.github.io/docs/sub-projects/lonelytreeguide_with_lovable/
